@@ -32,6 +32,7 @@ type Worker struct {
 	StopChan            chan bool
 	onStop              func()
 	log                 *log.Logger
+	verbose             bool
 }
 
 type queue struct {
@@ -49,6 +50,7 @@ func NewWorker(db *sql.DB, options ...WorkerOption) *Worker {
 		jobPollingInterval:  time.Second * 10,
 		deleteJobOnComplete: true,
 		log:                 defaultLogger(),
+		verbose:             false,
 	}
 	for _, option := range options {
 		option(runner)
@@ -314,4 +316,11 @@ func SetLogger(l *log.Logger) WorkerOption {
 
 func defaultLogger() *log.Logger {
 	return logger
+}
+
+// SetVerbose allows you to enable/disable logging every time a worker checks for a job.
+func SetVerbose(v bool) WorkerOption {
+	return func(worker *Worker) {
+		worker.verbose = v
+	}
 }
