@@ -10,7 +10,8 @@ import (
 
 	"github.com/jmoiron/sqlx"
 	"github.com/joomcode/errorx"
-	log "github.com/sirupsen/logrus"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 
 	// We only work with Postgres, so might as well pre-register the driver.
 	_ "github.com/lib/pq"
@@ -53,6 +54,12 @@ func NewWorker(db *sql.DB, options ...WorkerOption) *Worker {
 		option(runner)
 	}
 	return runner
+}
+
+func (worker *Worker) LogInfo(logEvent *zerolog.Event, msg interface{}) {
+	if worker.verbose {
+		logEvent.Msg(msg)
+	}
 }
 
 // EnqueueJob puts a job on the queue.  If successful, it returns the Job ID.
@@ -152,28 +159,27 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 	var jobErr error // the error returned by the jobFunc
 
 	// start an empty log entry that we'll append to throughout this func
-	logEntry := worker.log.WithFields(log.Fields{})
+	logFields := make(map[string]interface{})
 	tx, err := worker.db.Beginx()
 	if err != nil {
 		return false, err
 	}
 	defer func() {
-		logEntry = logEntry.WithFields(log.Fields{
-			"jobFound": attempted,
-		})
+		logFields["jobFound"] = attempted
 
 		if jobErr != nil {
-			logEntry = logEntry.WithField("jobError", jobErr)
+			logFields["jobError"] = jobErr
 		}
 
 		if outErr != nil {
-			logEntry = logEntry.WithField("workerError", outErr)
+			logFields["workerError"] = outErr
 		}
 
 		if jobErr != nil || outErr != nil {
-			logEntry.Error("PerformNextJob")
+			log.Error().Fields(logFields).Msg("PerformNextJob")
 		} else {
-			logEntry.Info("PerformNextJob")
+			logEntry := log.Info().Fields(logFields)
+			worker.LogInfo(logEntry, "PerformNextJob")
 		}
 
 		outErr = errorx.DecorateMany("error performing job", outErr, tx.Commit())
@@ -194,7 +200,8 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 	if job == nil {
 		return false, nil
 	}
-	logEntry = logEntry.WithFields(log.Fields{"id": job.ID, "queueName": job.QueueName})
+	logFields["id"] = job.ID
+	logFields["queueName"] = job.QueueName
 
 	// get handler func from internal map
 	queue, ok := worker.queues[job.QueueName]
@@ -205,7 +212,7 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 		)
 	}
 	ranAt := time.Now()
-	logEntry = logEntry.WithTime(ranAt)
+	logFields["ranAt"] = ranAt
 
 	// run the job func in its own closure with its own panic handler.
 	func() {
@@ -236,7 +243,7 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 	if jobErr != nil {
 		// handle backoffs
 		if b, ok := jobErr.(Backoffer); ok && b.Backoff() {
-			logEntry = logEntry.WithField("backoff", true)
+			logFields["backoff"] = true
 			// change multiplier if necessary
 			if queue.backoff == 0 {
 				queue.backoff = minBackoff
@@ -253,7 +260,7 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 			// we errored, but we have more attempts.  Enqueue the next one for the future, after waiting
 			// the first attempt duration.  Store the rest of the attempt Durations on the new Job.
 			afterTime := time.Now().Add(job.RetryWaits[0])
-			logEntry = logEntry.WithField("retryAfter", afterTime)
+			logFields["retryAfter"] = afterTime
 			_, err = enqueueJob(
 				tx,
 				job.QueueName,
@@ -268,7 +275,7 @@ func (worker *Worker) PerformNextJob() (attempted bool, outErr error) {
 	}
 	if queue.backoff > 0 {
 		queue.pausedUntil = ranAt.Add(queue.backoff)
-		logEntry = logEntry.WithField("queuePausedUntil", queue.pausedUntil)
+		logFields["queuePausedUntil"] = queue.pausedUntil
 	}
 	return true, nil
 }
@@ -306,10 +313,5 @@ func SetLogger(l *log.Logger) WorkerOption {
 }
 
 func defaultLogger() *log.Logger {
-	formatter := &log.TextFormatter{
-		FullTimestamp: true,
-	}
-	logger := log.New()
-	logger.Formatter = formatter
 	return logger
 }
