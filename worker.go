@@ -99,7 +99,7 @@ func (worker *Worker) RegisterQueue(queueName string, jobFunc func([]byte) error
 }
 
 // Run will query for the next job in the queue, then run it, then do another, forever.
-func (worker *Worker) Run() error {
+func (worker *Worker) Run(pollingOverride *time.Duration) error {
 	worker.log.WithField("queueNames", worker.getQueueNames()).Info("Run")
 	defer func() {
 		worker.log.Info("Exiting")
@@ -116,7 +116,14 @@ func (worker *Worker) Run() error {
 				return errorx.Decorate(err, "exiting job runner")
 			} else if !attemptedJob {
 				// we didn't find a job.  Take a nap.
-				time.Sleep(worker.jobPollingInterval)
+				pollingInterval := worker.jobPollingInterval
+
+				// override polling time duration if provided
+				if pollingOverride != nil {
+					pollingInterval = *pollingOverride
+				}
+
+				time.Sleep(pollingInterval)
 			}
 		}
 	}

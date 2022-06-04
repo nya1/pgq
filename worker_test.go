@@ -227,7 +227,7 @@ func TestRunABunchOfTasks(t *testing.T) {
 			worker.RegisterQueue("good", good)
 			worker.RegisterQueue("bad", bad)
 			worker.RegisterQueue("ugly", ugly)
-			go worker.Run()
+			go worker.Run(nil)
 			workers = append(workers, worker)
 		}
 		for n := 0; n < jobMultiplier; n++ {
@@ -309,7 +309,7 @@ func TestRunnerBackoff(t *testing.T) {
 			JobPollingInterval(0),
 		)
 		worker.RegisterQueue("bad", bad)
-		go worker.Run()
+		go worker.Run(nil)
 
 		for n := 0; n < jobs; n++ {
 			_, err := worker.EnqueueJob(
