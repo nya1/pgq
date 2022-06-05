@@ -31,7 +31,7 @@ type Worker struct {
 	deleteJobOnComplete bool
 	StopChan            chan bool
 	onStop              func()
-	log                 *log.Logger
+	log                 *zerolog.Logger
 	verbose             bool
 }
 
@@ -307,15 +307,15 @@ func OnStop(f func()) WorkerOption {
 	}
 }
 
-// SetLogger allows you to set your own logrus logger object for use by the job worker.
-func SetLogger(l *log.Logger) WorkerOption {
+// SetLogger allows you to set your own zerolog logger object for use by the job worker.
+func SetLogger(l *zerolog.Logger) WorkerOption {
 	return func(worker *Worker) {
 		worker.log = l
 	}
 }
 
-func defaultLogger() *log.Logger {
-	return logger
+func defaultLogger() *zerolog.Logger {
+	return &zerolog.Logger{}
 }
 
 // SetVerbose allows you to enable/disable logging every time a worker checks for a job.
